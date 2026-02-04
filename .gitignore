@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.egg-info/
+*.dist-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Audio outputs
+*.wav
+*.mp3
+*.m4b
+
+# Generated outputs
+audiobook_out/
+outdir*/
+outdir_*/
+chunks/
+audiobook_manifest.json
+chapter_index.json
+NOTICE.txt
+concat_list.txt
+merged_temp.wav
+
+# Voice models
+voices/
+*.onnx
+*.onnx.json
+
+# Speaker samples
+samples/
+samples/*.wav
+
+# PDFs / books
+tightcorner.pdf
+
+# Local/duplicate files
+README copy.md
+audiobook.mp3

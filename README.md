@@ -84,7 +84,7 @@ Arguments:
 - `--tts` `piper|xtts` (default: `piper`)
 - `--voice` Piper model name or `.onnx` path (default: `en_US-lessac-medium`)
 - `--speaker` XTTS speaker wav file (optional, recommended)
-- `--speed` 0.75–1.25 (default 1.0)
+- `--speed` 0.75-1.25 (default 1.0)
 - `--format` `mp3|m4b|wav` (default: mp3)
 - `--normalize` (apply `ffmpeg` loudnorm when available)
 - `--keep-headers` (skip header/footer removal)
@@ -109,3 +109,8 @@ If `ffmpeg` is missing, the tool falls back to WAV outputs.
 
 - The tool prints a warning about conversion rights and creates `NOTICE.txt`.
 - Per-chapter audio is created from cached chunk WAVs to support resume.
+
+## Repository notes
+
+- Voice models, speaker samples, and generated audio outputs are gitignored.
+- Keep PDFs local (for example, `tightcorner.pdf` is ignored by default).
