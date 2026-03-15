@@ -42,6 +42,7 @@ def concat_audio(
     output_path: Path,
     fmt: str = "mp3",
     normalize: bool = False,
+    natural: bool = False,
     metadata_title: Optional[str] = None,
     chapter_titles: Optional[List[str]] = None,
     chapter_durations: Optional[List[float]] = None,
@@ -84,8 +85,22 @@ def concat_audio(
     if metadata_title:
         args.extend(["-metadata", f"title={metadata_title}"])
 
+    filter_chain: List[str] = []
+    if natural:
+        filter_chain.extend(
+            [
+                # Keep cutoff values safe for 22.05kHz mono WAVs from local TTS.
+                "volume=-2dB",
+                "highpass=f=55",
+                "lowpass=f=9800",
+                "acompressor=threshold=-22dB:ratio=1.8:attack=12:release=180",
+                "alimiter=limit=0.95",
+            ]
+        )
     if normalize:
-        args.extend(["-af", "loudnorm"])
+        filter_chain.append("loudnorm")
+    if filter_chain:
+        args.extend(["-af", ",".join(filter_chain)])
 
     if fmt == "mp3":
         args.extend(["-codec:a", "libmp3lame", "-b:a", "192k"])

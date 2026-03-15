@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 import time
+import wave
 from pathlib import Path
 from typing import List, Optional
 
@@ -14,7 +15,13 @@ from .manifest import ChunkRecord, create_manifest, load_manifest, save_manifest
 from .pdf_to_text import extract_text
 from .tts_piper import DEFAULT_PIPER_VOICE, synthesize as piper_synthesize
 from .tts_xtts import synthesize as xtts_synthesize
-from .utils import ensure_dir, ffmpeg_exists, sanitize_filename, sha256_file
+from .utils import (
+    ensure_dir,
+    ffmpeg_exists,
+    naturalize_tts_text,
+    sanitize_filename,
+    sha256_file,
+)
 
 
 DEFAULT_OUT = "audiobook_out"
@@ -99,6 +106,31 @@ def _concat_wav_python(wav_paths: List[Path], output_path: Path) -> None:
             out.writeframes(chunk)
 
 
+def _build_silence_wav(path: Path, duration_ms: int, sample_rate: int = 22050) -> Path:
+    ensure_dir(path.parent)
+    if path.exists():
+        return path
+    frame_count = int(sample_rate * (duration_ms / 1000.0))
+    silence = b"\x00\x00" * frame_count
+    with wave.open(str(path), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)  # 16-bit PCM
+        wf.setframerate(sample_rate)
+        wf.writeframes(silence)
+    return path
+
+
+def _interleave_with_pause(paths: List[Path], pause_wav: Path) -> List[Path]:
+    if len(paths) <= 1:
+        return paths
+    interleaved: List[Path] = []
+    for idx, path in enumerate(paths):
+        interleaved.append(path)
+        if idx < len(paths) - 1:
+            interleaved.append(pause_wav)
+    return interleaved
+
+
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="audiobooker")
     parser.add_argument("--pdf", default="tightcorner.pdf")
@@ -111,6 +143,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--speed", type=float, default=1.0)
     parser.add_argument("--format", default="mp3", choices=["mp3", "m4b", "wav"])
     parser.add_argument("--normalize", action="store_true")
+    parser.add_argument("--natural", action="store_true")
+    parser.add_argument("--pause-ms", type=int, default=220)
     parser.add_argument("--keep-headers", action="store_true")
     parser.add_argument("--resume", action="store_true", default=True)
     return parser.parse_args(argv)
@@ -125,6 +159,9 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     if args.speed < 0.75 or args.speed > 1.25:
         print("[ERROR] --speed must be between 0.75 and 1.25")
+        sys.exit(1)
+    if args.pause_ms < 0 or args.pause_ms > 1500:
+        print("[ERROR] --pause-ms must be between 0 and 1500")
         sys.exit(1)
 
     out_dir = ensure_dir(args.out)
@@ -153,6 +190,8 @@ def main(argv: Optional[List[str]] = None) -> None:
         "speed": str(args.speed),
         "format": args.format,
         "normalize": str(args.normalize),
+        "natural": str(args.natural),
+        "pause_ms": str(args.pause_ms),
     }
 
     manifest = None
@@ -171,11 +210,18 @@ def main(argv: Optional[List[str]] = None) -> None:
     for chap_idx, chapter in enumerate(chapters, start=1):
         chapter_slug = sanitize_filename(chapter.title)
         chapter_dir = ensure_dir(out_dir / "chunks" / f"{chap_idx:02d}_{chapter_slug}")
-        chunk_texts = split_into_chunks(chapter.text)
+        chunk_texts = split_into_chunks(
+            chapter.text,
+            min_chars=1100 if args.natural else 1500,
+            max_chars=2200 if args.natural else 3000,
+            preserve_paragraph_gaps=True,
+        )
         chunk_paths: List[Path] = []
 
         print(f"[INFO] Chapter {chap_idx}/{len(chapters)}: {chapter.title}")
         for chunk_idx, chunk_text in enumerate(chunk_texts, start=1):
+            if args.natural:
+                chunk_text = naturalize_tts_text(chunk_text)
             chunk_path = chapter_dir / f"{chunk_idx:04d}.wav"
             chunk_paths.append(chunk_path)
             if chunk_path.exists():
@@ -221,12 +267,26 @@ def main(argv: Optional[List[str]] = None) -> None:
             )
             save_manifest(out_dir, manifest)
 
+        chapter_inputs = chunk_paths
+        if args.natural and args.pause_ms > 0:
+            pause_file = _build_silence_wav(
+                out_dir / "chunks" / "_pauses" / f"pause_{args.pause_ms}ms.wav",
+                duration_ms=args.pause_ms,
+            )
+            chapter_inputs = _interleave_with_pause(chunk_paths, pause_file)
+
         chapter_file = out_dir / f"{chap_idx:02d}_{chapter_slug}.{args.format}"
         if args.format == "wav":
-            _concat_wav_python(chunk_paths, chapter_file)
+            _concat_wav_python(chapter_inputs, chapter_file)
         else:
             if ffmpeg_exists():
-                concat_audio(chunk_paths, chapter_file, fmt=args.format, normalize=args.normalize)
+                concat_audio(
+                    chapter_inputs,
+                    chapter_file,
+                    fmt=args.format,
+                    normalize=args.normalize,
+                    natural=args.natural,
+                )
             else:
                 print("[WARN] ffmpeg not available; writing WAV chapter output instead.")
                 chapter_file = out_dir / f"{chap_idx:02d}_{chapter_slug}.wav"
@@ -251,6 +311,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 merged_name,
                 fmt=args.format,
                 normalize=args.normalize,
+                natural=args.natural,
                 metadata_title=title,
                 chapter_titles=[c.title for c in chapters],
                 chapter_durations=durations,

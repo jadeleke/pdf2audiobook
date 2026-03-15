@@ -73,6 +73,7 @@ Linux:
 python -m audiobooker --pdf tightcorner.pdf --out outdir
 python -m audiobooker --pdf tightcorner.pdf --chapters auto --tts piper
 python -m audiobooker --pdf tightcorner.pdf --tts xtts --speaker samples/female.wav
+python -m audiobooker --pdf tightcorner.pdf --chapters auto --tts piper --natural --speed 1.0
 ```
 
 Arguments:
@@ -87,8 +88,27 @@ Arguments:
 - `--speed` 0.75-1.25 (default 1.0)
 - `--format` `mp3|m4b|wav` (default: mp3)
 - `--normalize` (apply `ffmpeg` loudnorm when available)
+- `--natural` (more natural pacing: smaller chunks, pause shaping, light mastering)
+- `--pause-ms` pause between chunks when `--natural` is on (default: `220`)
 - `--keep-headers` (skip header/footer removal)
 - `--resume` (default: true)
+
+## Natural voice preset
+
+Use `--natural` for less synthetic narration. It enables:
+- tighter chunk lengths for more stable prosody
+- paragraph-aware pause shaping in text before synthesis
+- pause insertion between chunk renders (default `220ms`)
+- ffmpeg mastering chain (`volume trim`, `highpass`, `lowpass`, light compression, limiter)
+- optional `loudnorm` when `--normalize` is also set
+
+Examples:
+
+```bash
+python -m audiobooker --pdf tightcorner.pdf --chapters auto --tts piper --voice en_US-lessac-medium --speed 1.0 --natural --normalize --out outdir_female_natural
+python -m audiobooker --pdf tightcorner.pdf --chapters auto --tts piper --voice en_US-ryan-medium --speed 1.0 --natural --normalize --out outdir_male_natural
+python -m audiobooker --pdf tightcorner.pdf --chapters auto --tts piper --voice en_US-lessac-medium --speed 1.0 --natural --pause-ms 280 --normalize --out outdir_female_studio
+```
 
 ## Output structure
 

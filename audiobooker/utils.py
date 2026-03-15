@@ -47,3 +47,28 @@ def safe_remove(path: str | Path) -> None:
 
 def clean_tts_text(text: str) -> str:
     return text.encode("utf-8", "ignore").decode("utf-8")
+
+
+def naturalize_tts_text(text: str) -> str:
+    """Shape text to encourage steadier pauses in local TTS engines."""
+    cleaned = clean_tts_text(text)
+    cleaned = re.sub(r"\s+\n", "\n", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    lines = cleaned.splitlines()
+    normalized: list[str] = []
+    for line in lines:
+        value = line.strip()
+        if not value:
+            normalized.append("")
+            continue
+        # Ensure headings and short lines end with terminal punctuation so TTS pauses.
+        if re.match(r"^(chapter|part)\b", value, flags=re.IGNORECASE):
+            if value[-1] not in ".!?":
+                value = f"{value}."
+        elif value[-1] not in ".!?":
+            value = f"{value}."
+        normalized.append(value)
+    shaped = "\n".join(normalized)
+    # Add a soft pause before paragraph breaks if a paragraph ends without punctuation.
+    shaped = re.sub(r"([A-Za-z0-9])\n\n", r"\1.\n\n", shaped)
+    return shaped

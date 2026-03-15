@@ -41,6 +41,7 @@ def split_into_chunks(
     text: str,
     min_chars: int = 1500,
     max_chars: int = 3000,
+    preserve_paragraph_gaps: bool = True,
 ) -> List[str]:
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
     chunks: List[str] = []
@@ -69,12 +70,13 @@ def split_into_chunks(
 
     merged: List[str] = []
     buffer = ""
+    joiner = "\n\n" if preserve_paragraph_gaps else " "
     for chunk in chunks:
         if not buffer:
             buffer = chunk
             continue
         if len(buffer) < min_chars:
-            buffer = f"{buffer} {chunk}"
+            buffer = f"{buffer}{joiner}{chunk}"
         else:
             merged.append(buffer.strip())
             buffer = chunk
